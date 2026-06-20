@@ -88,51 +88,32 @@ LANG_SOFT_HINTS = ["a plus", "plus.", "nice to have", "nice-to-have",
                    "advantageous", "would be a plus", "optional"]
 
 # (6) Location filter -----------------------------------------------------
-# Priority ALLOW: if the location OR description mentions any of these
-# Middle-East/Egypt/Gulf regions, accept the job even if Europe/America is
-# also mentioned (these regions include Egypt and the Gulf).
-LOCATION_ALLOW_PRIORITY = [
-    "emea", "mena", "middle east", "gcc", "gulf", "arab world",
-    "arab region", "egypt",
+# STRICT allow-list: accept a job ONLY when its location OR description
+# clearly places it in the Gulf, Egypt, or a region that includes them
+# (MENA / Middle East / GCC / Gulf / Arab region). Everything else is
+# rejected — Europe, the Americas, non-Gulf Asia, and any vague/blank or
+# generic "Remote / Worldwide / Anywhere" location with no explicit mention.
+# Short/ambiguous tokens use word boundaries to avoid false matches
+# (e.g. "oman" inside "Romania", "mena" inside "phenomena").
+LOCATION_ALLOW = [
+    # --- regions that include Egypt/Gulf ---
+    r"\bmena\b", r"middle east", r"\bgcc\b", r"\bgulf\b", r"arab region",
+    # --- Saudi Arabia ---
+    r"saudi arabia", r"\bsaudi\b", r"\bksa\b", r"riyadh", r"jeddah",
+    # --- UAE ---
+    r"\buae\b", r"united arab emirates", r"\bemirates\b", r"dubai",
+    r"abu dhabi",
+    # --- Qatar ---
+    r"\bqatar\b", r"\bdoha\b",
+    # --- Kuwait ---
+    r"\bkuwait\b",
+    # --- Oman ---
+    r"\boman\b", r"muscat",
+    # --- Bahrain ---
+    r"bahrain", r"manama",
+    # --- Egypt ---
+    r"\begypt\b", r"egyptian", r"cairo",
 ]
-
-# Reject the job only if its LOCATION names / is restricted to Europe or the
-# Americas (a country, a region like EU/EEA, or a major city) AND none of the
-# priority-allow regions above are present. Anything else passes: Gulf, Egypt,
-# open global remote, or an unclear/blank location.
-# Each entry is a regex token matched (case-insensitive) against the location.
-LOCATION_BLOCK = [
-    # --- North America ---
-    r"\bunited states\b", r"\bu\.?s\.?a\.?\b", r"\bu\.?s\.?\b", r"\busa\b",
-    r"\bamerica\b", r"\bcanada\b", r"\bcanadian\b",
-    # --- Europe (regions) ---
-    r"\beurope\b", r"\beuropean\b", r"\be\.?u\.?\b", r"\beea\b",
-    # --- Europe (countries) ---
-    r"netherlands", r"\bholland\b", r"germany", r"\bgerman\b", r"france",
-    r"\bfrench\b", r"spain", r"italy", r"belgium", r"poland", r"ireland",
-    r"\buk\b", r"united kingdom", r"\bengland\b", r"scotland", r"wales",
-    r"\bgreat britain\b", r"\bbritain\b", r"portugal", r"austria",
-    r"switzerland", r"sweden", r"denmark", r"norway", r"finland", r"greece",
-    r"czech", r"hungary", r"romania", r"bulgaria", r"slovakia", r"croatia",
-    r"luxembourg", r"\bgreece\b",
-    # --- US cities ---
-    r"new york", r"san francisco", r"los angeles", r"\bchicago\b", r"boston",
-    r"seattle", r"\baustin\b", r"\bdenver\b", r"atlanta", r"miami", r"dallas",
-    r"houston", r"\bphoenix\b", r"\bsan diego\b", r"\bportland\b",
-    r"washington", r"philadelphia", r"\bnyc\b",
-    # --- European / Canadian cities ---
-    r"amsterdam", r"rotterdam", r"\bberlin\b", r"munich", r"hamburg",
-    r"frankfurt", r"\bparis\b", r"\blyon\b", r"madrid", r"barcelona",
-    r"\brome\b", r"\bmilan\b", r"brussels", r"antwerp", r"warsaw", r"krakow",
-    r"\blondon\b", r"manchester", r"\bdublin\b", r"lisbon", r"\bporto\b",
-    r"vienna", r"zurich", r"geneva", r"stockholm", r"copenhagen", r"\boslo\b",
-    r"helsinki", r"athens", r"prague", r"budapest", r"bucharest",
-    r"toronto", r"vancouver", r"montreal", r"ottawa", r"calgary",
-]
-
-# Open-global remote signals: if the location is just these, it passes.
-LOCATION_OPEN_REMOTE = ["remote", "worldwide", "anywhere", "global",
-                        "work from home", "wfh", "international"]
 
 # (3) Salary filter: convert to EGP/month; reject if < this threshold.
 MIN_EGP_PER_MONTH = 50000
@@ -578,20 +559,13 @@ def salary_passes(job):
 
 
 def location_passes(location, description=""):
-    """(6) Reject only if the location is in/restricted to Europe or the
-    Americas. Gulf, Egypt, open global remote, and unclear/blank all pass.
-
-    Priority allow: if the location OR description mentions a Middle-East /
-    Egypt / Gulf region, accept even if Europe/America is also mentioned."""
+    """(6) STRICT: accept ONLY when the location OR description explicitly
+    names the Gulf, Egypt, or a region that includes them (MENA / Middle
+    East / GCC / Gulf / Arab region). Everything else is rejected, including
+    vague/blank locations and generic 'Remote / Worldwide / Anywhere' with
+    no explicit Gulf/Egypt/MENA mention."""
     combined = ((location or "") + " " + (description or "")).lower()
-    if any(a in combined for a in LOCATION_ALLOW_PRIORITY):
-        return True  # explicitly covers Egypt/Gulf -> accept
-    t = (location or "").strip().lower()
-    if not t:
-        return True  # unclear -> treat as global remote
-    if any(re.search(p, t) for p in LOCATION_BLOCK):
-        return False
-    return True  # allowed region, open remote, or unrecognized -> pass
+    return any(re.search(p, combined) for p in LOCATION_ALLOW)
 
 
 def passes_filter(job):
