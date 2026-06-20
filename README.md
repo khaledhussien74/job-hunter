@@ -49,11 +49,23 @@
 
 ## 🌐 المصادر (كلها مجانية وقانونية)
 
+**المصدر الأساسي للخليج/مصر — Google Custom Search** (محتاج مفتاحين مجانيين):
+محرك بحث مخصص (CSE) مربوط على Bayt و Wuzzuf و LinkedIn و NaukriGulf و
+Glassdoor. البوت بيستخدم الـ **Google Custom Search JSON API** ويبحث عن
+المسميات (marketing manager / digital marketing manager / performance
+marketing manager / marketing director / head of marketing / head of digital)
+مدموجة بكلمات أماكن الخليج/مصر. **بيستخدم بس (العنوان + اللينك + المقتطف)
+اللي بترجّعه الـAPI — مبيسحبش صفحة الوظيفة نفسها** التزامًا بشروط المواقع دي.
+
+> ⚠️ **حدود الخطة المجانية:** Google CSE مجاني لحد **١٠٠ بحث في اليوم**.
+> عشان كده البوت بيعمل **٦ بحثات بس في كل تشغيلة** (بحد أقصى ٧)، والـ workflow
+> بيشتغل **كل ٣ ساعات** (≈٨ مرات/يوم) → ٦×٨ = ٤٨ بحث/يوم، تحت الحد بأمان.
+
 شغّالة بدون أي مفاتيح:
 **Remotive، RemoteOK، Jobicy، Arbeitnow، Himalayas، We Work Remotely (RSS)،
 The Muse، Findwork.**
 
-مصدر تجميعي (aggregator) محتاج مفتاح مجاني (اختياري — البوت بيشتغل من غيره):
+مصدر تجميعي إضافي محتاج مفتاح مجاني (اختياري):
 **Jooble** — والبوت بيطلب منه كل دولة لوحدها (مصر، الإمارات، السعودية، قطر،
 الكويت، عُمان، البحرين) عشان يرجّع المناطق دي بس من المصدر نفسه.
 
@@ -70,6 +82,8 @@ The Muse، Findwork.**
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | ✅ | توكن بوت التيليجرام |
 | `TELEGRAM_CHAT_ID` | ✅ | رقم الـ chat اللي هيوصله الرسايل |
+| `GOOGLE_API_KEY` | للمصدر الأساسي | مفتاح Google Custom Search JSON API |
+| `GOOGLE_CSE_ID` | للمصدر الأساسي | معرّف محرك البحث المخصص (cx) |
 | `JOOBLE_API_KEY` | اختياري | لتفعيل Jooble |
 
 ### تشغيل محلي (للتجربة)
@@ -77,20 +91,24 @@ The Muse، Findwork.**
 ```bash
 export TELEGRAM_BOT_TOKEN="ضع_التوكن_هنا"
 export TELEGRAM_CHAT_ID="ضع_الـchat_id_هنا"
+# للمصدر الأساسي (Google):
+export GOOGLE_API_KEY="..."
+export GOOGLE_CSE_ID="..."
 # اختياري:
 export JOOBLE_API_KEY="..."
 
 python job_hunter.py --once     # تشغيل مرة واحدة
-python job_hunter.py            # تشغيل مستمر كل ٢٠ دقيقة
+python job_hunter.py            # تشغيل مستمر
 ```
 
 ---
 
 ## 🤖 التشغيل التلقائي ٢٤ ساعة (GitHub Actions)
 
-في ملف `.github/workflows/job-hunter.yml` بيشغّل البوت **كل ٢٠ دقيقة** تلقائيًا،
-بياخد القيم من **GitHub Secrets**، وبيحفظ `seen_jobs.json` بين التشغيلات (بيعمله
-commit ورا كل مرة) عشان الوظايف ماتتكررش.
+ملف `.github/workflows/job-hunter.yml` بيشغّل البوت **كل ٣ ساعات** تلقائيًا
+(عشان نفضل تحت حد Google CSE المجاني ١٠٠ بحث/يوم)، بياخد القيم من
+**GitHub Secrets**، وبيحفظ `seen_jobs.json` بين التشغيلات (بيعمله commit ورا كل
+مرة) عشان الوظايف ماتتكررش.
 
 > ملاحظة: مواعيد الـ cron في GitHub أحيانًا بتتأخر شوية وقت الزحمة، ده طبيعي.
 
@@ -105,12 +123,30 @@ commit ورا كل مرة) عشان الوظايف ماتتكررش.
 3. افتح في المتصفح: `https://api.telegram.org/bot<التوكن>/getUpdates`
    وهتلاقي `"chat":{"id": ...}` — الرقم ده هو `TELEGRAM_CHAT_ID`.
 
-### ٢) تسجّل في Jooble وتجيب الـ key (مجاني)
+### ٢) تجهّز Google Custom Search (المصدر الأساسي)
+**أ) اعمل محرك بحث مخصص (CSE) وتجيب الـ `GOOGLE_CSE_ID`:**
+1. ادخل **https://programmablesearchengine.google.com/** واعمل **Add / Create**.
+2. في **Sites to search** ضيف المواقع اللي عايز تبحث جوّاها، مثلًا:
+   `bayt.com`، `wuzzuf.net`، `linkedin.com/jobs`، `naukrigulf.com`،
+   `glassdoor.com`.
+3. بعد الإنشاء افتح **Control Panel** وهتلاقي **Search engine ID** — ده
+   `GOOGLE_CSE_ID` (الـ cx).
+
+**ب) تفعّل الـ API وتجيب الـ `GOOGLE_API_KEY`:**
+1. ادخل **https://console.cloud.google.com/** واعمل مشروع جديد (أو اختار واحد).
+2. من **APIs & Services → Library** دوّر على **Custom Search API** واضغط
+   **Enable**.
+3. من **APIs & Services → Credentials** اضغط **Create credentials → API key**
+   — ده `GOOGLE_API_KEY`.
+
+> 💡 الخطة المجانية ١٠٠ بحث/يوم. البوت متظبّط يفضل تحتها (٦ بحثات/تشغيلة، كل ٣ ساعات).
+
+### ٣) تسجّل في Jooble وتجيب الـ key (اختياري)
 1. ادخل **https://jooble.org/api/about**.
 2. اضغط **Get API key** / **Get a free key** واملأ بياناتك.
 3. هيوصلك مفتاح (سلسلة حروف وأرقام) = `JOOBLE_API_KEY`.
 
-### ٣) تضيف القيم في GitHub Secrets (خطوة بخطوة)
+### ٤) تضيف القيم في GitHub Secrets (خطوة بخطوة)
 1. افتح صفحة الريبو على GitHub.
 2. **Settings** (من فوق) ← من القايمة الشمال: **Secrets and variables** ← **Actions**.
 3. اضغط زرار **New repository secret**.
@@ -118,13 +154,15 @@ commit ورا كل مرة) عشان الوظايف ماتتكررش.
 5. كرّر الخطوة لكل واحد من دول:
    - `TELEGRAM_BOT_TOKEN`  (إجباري)
    - `TELEGRAM_CHAT_ID`    (إجباري)
+   - `GOOGLE_API_KEY`      (للمصدر الأساسي)
+   - `GOOGLE_CSE_ID`       (للمصدر الأساسي)
    - `JOOBLE_API_KEY`      (لو سجّلت في Jooble)
 
-### ٤) تتأكد إن الـ Actions شغّالة
+### ٥) تتأكد إن الـ Actions شغّالة
 1. روح تاب **Actions** في الريبو، ولو ظهرلك زرار تفعيل اضغط عليه.
 2. اختار workflow اسمه **Job Hunter** واضغط **Run workflow** عشان تجرّبه يدوي.
 3. تابع الـ logs، ولو كله تمام هتبدأ توصلك الوظايف على تيليجرام، وبعد كده
-   هيشتغل لوحده كل ٢٠ دقيقة.
+   هيشتغل لوحده كل ٣ ساعات.
 
 > 💡 لو عايز تظبط الحد الأدنى للمرتب أو أسعار الصرف، عدّل `MIN_EGP_PER_MONTH`
 > و `FX_TO_EGP` في أول ملف `job_hunter.py`.

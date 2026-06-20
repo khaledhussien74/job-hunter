@@ -8,19 +8,25 @@ NEW matching jobs to a Telegram chat.
 Secrets are read from environment variables:
     TELEGRAM_BOT_TOKEN   (required)
     TELEGRAM_CHAT_ID     (required)
+    GOOGLE_API_KEY       (optional - enables Google Custom Search source)
+    GOOGLE_CSE_ID        (optional - enables Google Custom Search source)
     JOOBLE_API_KEY       (optional - enables Jooble source)
 
-No scraping of LinkedIn / Indeed / Glassdoor / Bayt is performed.
+No scraping of LinkedIn / Indeed / Glassdoor / Bayt is performed. The Google
+Custom Search source uses ONLY the title/link/snippet returned by the API.
 """
 import json, time, html, os, sys, re
 from datetime import datetime
 from urllib.request import Request, urlopen
+from urllib.parse import quote_plus
 
 # ----------------------------------------------------------------------------
 # Secrets (from environment variables — never hard-code them)
 # ----------------------------------------------------------------------------
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+GOOGLE_API_KEY     = os.environ.get("GOOGLE_API_KEY", "").strip()
+GOOGLE_CSE_ID      = os.environ.get("GOOGLE_CSE_ID", "").strip()
 JOOBLE_API_KEY     = os.environ.get("JOOBLE_API_KEY", "").strip()
 
 # ----------------------------------------------------------------------------
@@ -377,6 +383,69 @@ JOOBLE_LOCATIONS = ["Egypt", "United Arab Emirates", "Saudi Arabia",
                     "Qatar", "Kuwait", "Oman", "Bahrain"]
 
 
+# --- Google Custom Search (primary source for Gulf/Egypt jobs) -----------
+# Free tier is limited to 100 queries/day, so we run a small, fixed number
+# of searches per run. Each entry below is one search query (= one quota
+# unit). Combined with a ~3h workflow schedule (~8 runs/day) this stays well
+# under 100 searches/day (e.g. 6 queries x 8 runs = 48/day).
+GOOGLE_ENDPOINT = "https://www.googleapis.com/customsearch/v1"
+GOOGLE_MAX_SEARCHES_PER_RUN = 7
+# All target marketing titles, OR-combined into one expression.
+GOOGLE_TITLE_EXPR = (
+    '("marketing manager" OR "digital marketing manager" OR '
+    '"performance marketing manager" OR "marketing director" OR '
+    '"head of marketing" OR "head of digital")')
+# Location groups (Gulf + Egypt + region). One search per group.
+GOOGLE_LOCATION_GROUPS = [
+    'UAE OR Dubai OR "Abu Dhabi"',
+    "Saudi OR Riyadh OR Jeddah OR KSA",
+    "Qatar OR Doha OR Kuwait",
+    "Oman OR Muscat OR Bahrain OR Manama",
+    "Egypt OR Cairo",
+    'Gulf OR GCC OR MENA OR "Middle East"',
+]
+
+
+def fetch_google_cse():
+    """Google Custom Search JSON API. Uses ONLY the title/link/snippet the
+    API returns (never fetches the job page itself). Scoped to Gulf/Egypt and
+    rate-limited to stay within the free 100 searches/day tier."""
+    jobs = []
+    if not (GOOGLE_API_KEY and GOOGLE_CSE_ID):
+        print("  [i] Google CSE skipped (no GOOGLE_API_KEY / GOOGLE_CSE_ID)")
+        return jobs
+    queries = [f"{GOOGLE_TITLE_EXPR} {grp}" for grp in GOOGLE_LOCATION_GROUPS]
+    for q in queries[:GOOGLE_MAX_SEARCHES_PER_RUN]:
+        url = (f"{GOOGLE_ENDPOINT}?key={GOOGLE_API_KEY}&cx={GOOGLE_CSE_ID}"
+               f"&num=10&q={quote_plus(q)}")
+        raw = _fetch(url)
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            print("  [x] Google CSE not JSON")
+            continue
+        if "error" in data:
+            print("  [x] Google CSE error:",
+                  data["error"].get("message", "unknown"))
+            # Likely quota exceeded -> stop spending more searches this run.
+            break
+        for it in data.get("items", []):
+            link = (it.get("link") or "").strip()
+            title = (it.get("title") or "").strip()
+            snippet = (it.get("snippet") or "").strip()
+            if not link or not title:
+                continue
+            # Strict location check considers the title too, so fold it into
+            # the text the location filter sees (via description).
+            jobs.append(_job(
+                f"google-{link}", title, "", "", link, "Google",
+                description=title + " " + snippet))
+        time.sleep(1)
+    return jobs
+
+
 def fetch_jooble():
     """Jooble aggregator (needs free API key). One request per Gulf/Egypt
     location so results come back already scoped to those regions."""
@@ -408,6 +477,7 @@ def fetch_jooble():
 
 
 SOURCES = [
+    fetch_google_cse,  # primary source for Gulf/Egypt jobs
     fetch_remotive, fetch_jobicy, fetch_remoteok, fetch_arbeitnow,
     fetch_himalayas, fetch_weworkremotely, fetch_themuse, fetch_findwork,
     fetch_jooble,
@@ -557,11 +627,14 @@ def send_telegram(job):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("  [x] Telegram secrets not set (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID).")
         return False
-    text = ("New: <b>" + html.escape(job["title"]) + "</b>\n"
-            + html.escape(job["company"]) + "\n"
-            + html.escape(job["location"]) + "\n"
-            + html.escape(job["source"]) + "\n"
-            + html.escape(job["url"]))
+    # Always include the title + link; add company/location/source when known.
+    lines = ["New: <b>" + html.escape(job["title"]) + "</b>"]
+    for field in ("company", "location", "source"):
+        val = (job.get(field) or "").strip()
+        if val:
+            lines.append(html.escape(val))
+    lines.append(html.escape(job["url"]))
+    text = "\n".join(lines)
     payload = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": text,
                           "parse_mode": "HTML",
                           "disable_web_page_preview": False}).encode("utf-8")

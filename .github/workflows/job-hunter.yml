@@ -1,9 +1,11 @@
 name: Job Hunter
 
-# Runs the bot automatically every 20 minutes (and on manual trigger).
+# Runs every 3 hours (and on manual trigger). The 3-hour schedule keeps the
+# Google Custom Search free tier (100 searches/day) safe: ~8 runs/day x up to
+# 7 searches = well under 100/day.
 on:
   schedule:
-    - cron: "*/20 * * * *"
+    - cron: "0 */3 * * *"
   workflow_dispatch: {}
 
 # Allow the workflow to commit the updated seen_jobs.json back to the repo.
@@ -31,6 +33,8 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
           JOOBLE_API_KEY: ${{ secrets.JOOBLE_API_KEY }}
         run: python job_hunter.py --once
 
