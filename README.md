@@ -53,9 +53,12 @@
 **Remotive، RemoteOK، Jobicy، Arbeitnow، Himalayas، We Work Remotely (RSS)،
 The Muse، Findwork.**
 
-مصادر تجميعية (aggregators) محتاجة مفتاح مجاني (اختيارية — البوت بيشتغل من غيرها
-بس تغطيتها بتكبر معاها جدًا):
-**Adzuna** و **Jooble**.
+مصدر تجميعي (aggregator) محتاج مفتاح مجاني (اختياري — البوت بيشتغل من غيره):
+**Jooble** — والبوت بيطلب منه كل دولة لوحدها (مصر، الإمارات، السعودية، قطر،
+الكويت، عُمان، البحرين) عشان يرجّع المناطق دي بس من المصدر نفسه.
+
+> ℹ️ **Adzuna اتشال** لأنه مبيغطّيش الخليج/مصر (بيرجّع أمريكا/أوروبا) فكان
+> بيضيف نويز من غير فايدة.
 
 ---
 
@@ -67,8 +70,6 @@ The Muse، Findwork.**
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | ✅ | توكن بوت التيليجرام |
 | `TELEGRAM_CHAT_ID` | ✅ | رقم الـ chat اللي هيوصله الرسايل |
-| `ADZUNA_APP_ID` | اختياري | لتفعيل Adzuna |
-| `ADZUNA_APP_KEY` | اختياري | لتفعيل Adzuna |
 | `JOOBLE_API_KEY` | اختياري | لتفعيل Jooble |
 
 ### تشغيل محلي (للتجربة)
@@ -77,8 +78,6 @@ The Muse، Findwork.**
 export TELEGRAM_BOT_TOKEN="ضع_التوكن_هنا"
 export TELEGRAM_CHAT_ID="ضع_الـchat_id_هنا"
 # اختياري:
-export ADZUNA_APP_ID="..."
-export ADZUNA_APP_KEY="..."
 export JOOBLE_API_KEY="..."
 
 python job_hunter.py --once     # تشغيل مرة واحدة
@@ -106,17 +105,12 @@ commit ورا كل مرة) عشان الوظايف ماتتكررش.
 3. افتح في المتصفح: `https://api.telegram.org/bot<التوكن>/getUpdates`
    وهتلاقي `"chat":{"id": ...}` — الرقم ده هو `TELEGRAM_CHAT_ID`.
 
-### ٢) تسجّل في Adzuna وتجيب الـ keys (مجاني)
-1. ادخل **https://developer.adzuna.com/** واعمل **Register / Sign up**.
-2. فعّل الإيميل وادخل على **Dashboard / My Apps**.
-3. هتلاقي **Application ID** = `ADZUNA_APP_ID` و **Application Key** = `ADZUNA_APP_KEY`.
-
-### ٣) تسجّل في Jooble وتجيب الـ key (مجاني)
+### ٢) تسجّل في Jooble وتجيب الـ key (مجاني)
 1. ادخل **https://jooble.org/api/about**.
 2. اضغط **Get API key** / **Get a free key** واملأ بياناتك.
 3. هيوصلك مفتاح (سلسلة حروف وأرقام) = `JOOBLE_API_KEY`.
 
-### ٤) تضيف القيم في GitHub Secrets (خطوة بخطوة)
+### ٣) تضيف القيم في GitHub Secrets (خطوة بخطوة)
 1. افتح صفحة الريبو على GitHub.
 2. **Settings** (من فوق) ← من القايمة الشمال: **Secrets and variables** ← **Actions**.
 3. اضغط زرار **New repository secret**.
@@ -124,11 +118,9 @@ commit ورا كل مرة) عشان الوظايف ماتتكررش.
 5. كرّر الخطوة لكل واحد من دول:
    - `TELEGRAM_BOT_TOKEN`  (إجباري)
    - `TELEGRAM_CHAT_ID`    (إجباري)
-   - `ADZUNA_APP_ID`       (لو سجّلت في Adzuna)
-   - `ADZUNA_APP_KEY`      (لو سجّلت في Adzuna)
    - `JOOBLE_API_KEY`      (لو سجّلت في Jooble)
 
-### ٥) تتأكد إن الـ Actions شغّالة
+### ٤) تتأكد إن الـ Actions شغّالة
 1. روح تاب **Actions** في الريبو، ولو ظهرلك زرار تفعيل اضغط عليه.
 2. اختار workflow اسمه **Job Hunter** واضغط **Run workflow** عشان تجرّبه يدوي.
 3. تابع الـ logs، ولو كله تمام هتبدأ توصلك الوظايف على تيليجرام، وبعد كده
