@@ -11,11 +11,12 @@ Secrets are read from environment variables:
     GOOGLE_API_KEY       (optional - enables Google Custom Search source)
     GOOGLE_CSE_ID        (optional - enables Google Custom Search source)
     JOOBLE_API_KEY       (optional - enables Jooble source)
+    ANTHROPIC_API_KEY    (optional - enables AI cover-letter PDF per job)
 
 No scraping of LinkedIn / Indeed / Glassdoor / Bayt is performed. The Google
 Custom Search source uses ONLY the title/link/snippet returned by the API.
 """
-import json, time, html, os, sys, re
+import json, time, html, os, sys, re, tempfile
 from datetime import datetime
 from urllib.request import Request, urlopen
 from urllib.parse import quote_plus
@@ -28,6 +29,7 @@ TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 GOOGLE_API_KEY     = os.environ.get("GOOGLE_API_KEY", "").strip()
 GOOGLE_CSE_ID      = os.environ.get("GOOGLE_CSE_ID", "").strip()
 JOOBLE_API_KEY     = os.environ.get("JOOBLE_API_KEY", "").strip()
+ANTHROPIC_API_KEY  = os.environ.get("ANTHROPIC_API_KEY", "").strip()
 
 # ----------------------------------------------------------------------------
 # Filtering rules
@@ -168,6 +170,28 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (JobHunter)",
            "Accept": "application/json, */*"}
 SEARCH_TERMS = ["marketing manager", "digital marketing", "head of marketing",
                 "performance marketing", "marketing director"]
+
+# Per-job AI cover letter -> PDF -> Telegram (needs ANTHROPIC_API_KEY).
+ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_VERSION = "2023-06-01"
+# Haiku keeps per-job cost/latency low; bump to a Sonnet/Opus id for richer
+# letters (see https://docs.anthropic.com for current model ids).
+CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+# Applicant identity + profile used to tailor the cover letter. Edit to match
+# your CV.
+APPLICANT_NAME = "Khaled Hussien"
+APPLICANT_PROFILE = (
+    "Khaled Hussien — Marketing Manager / Digital Marketing Manager with 10+ "
+    "years driving revenue, demand, and online growth across the GCC and "
+    "MENA. Owns the full customer journey end-to-end (paid media, SEO/CRO, "
+    "organic social, and brand) and decides on data — reporting on CAC, LTV, "
+    "ROAS, and contribution to revenue rather than vanity metrics. Hands-on "
+    "with Google Ads and paid social (Meta, TikTok, Snapchat, LinkedIn), "
+    "full-funnel and CRO, and CRM/lifecycle. Strong analytics in GA4, Google "
+    "Tag Manager, and Looker Studio; daily user of AI tools (ChatGPT, "
+    "Claude). Proven leader who has built and led teams from 12 to 150+, "
+    "with deep GCC market knowledge and native Arabic. Certified by Google, "
+    "LinkedIn, and Coursera.")
 
 
 # ----------------------------------------------------------------------------
@@ -649,6 +673,147 @@ def send_telegram(job):
         return False
 
 
+# ----------------------------------------------------------------------------
+# AI cover letter -> PDF -> Telegram document
+# ----------------------------------------------------------------------------
+def generate_cover_letter(job):
+    """Ask Claude for a short, tailored cover letter for this job. Returns the
+    text, or None on any failure (so callers can fall back to a plain msg)."""
+    if not ANTHROPIC_API_KEY:
+        return None
+    prompt = (
+        "Write a concise, professional cover letter (max ~200 words) in "
+        "English for the job below. Use the applicant profile to tailor it. "
+        "Output ONLY the letter body — no preamble, no markdown, no bracketed "
+        "placeholders. Do not invent contact details, dates, or company "
+        f"names. You may sign off with the applicant's name ({APPLICANT_NAME})."
+        "\n\n"
+        f"Applicant profile: {APPLICANT_PROFILE}\n\n"
+        f"Job title: {job.get('title','')}\n"
+        f"Company: {job.get('company','') or 'N/A'}\n"
+        f"Location: {job.get('location','')}\n"
+        f"Details: {(job.get('description','') or '')[:1500]}\n")
+    body = json.dumps({
+        "model": CLAUDE_MODEL,
+        "max_tokens": 600,
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode("utf-8")
+    headers = {"x-api-key": ANTHROPIC_API_KEY,
+               "anthropic-version": ANTHROPIC_VERSION,
+               "content-type": "application/json"}
+    try:
+        with urlopen(Request(ANTHROPIC_ENDPOINT, data=body, headers=headers),
+                     timeout=60) as r:
+            data = json.loads(r.read().decode())
+        parts = [b.get("text", "") for b in data.get("content", [])
+                 if b.get("type") == "text"]
+        text = "\n".join(parts).strip()
+        return text or None
+    except Exception as e:
+        print("  [x] claude:", e)
+        return None
+
+
+def _latin1(s):
+    """fpdf2 core fonts are Latin-1 only; drop chars it can't encode."""
+    return (s or "").encode("latin-1", "replace").decode("latin-1")
+
+
+def make_pdf(job, cover_text, path):
+    """Render a one-page PDF with the job header + cover letter. Returns the
+    path on success, or None if fpdf2 isn't available / rendering fails."""
+    try:
+        from fpdf import FPDF
+        from fpdf.enums import XPos, YPos
+    except Exception as e:
+        print("  [x] fpdf2 not available:", e)
+        return None
+    nl = {"new_x": XPos.LMARGIN, "new_y": YPos.NEXT}  # wrap to next line
+    try:
+        pdf = FPDF(format="A4")
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.multi_cell(0, 8, _latin1(job.get("title", "")), **nl)
+        pdf.ln(1)
+        pdf.set_font("Helvetica", "", 10)
+        for label, key in (("Company", "company"), ("Location", "location"),
+                           ("Source", "source"), ("Link", "url")):
+            val = (job.get(key) or "").strip()
+            if val:
+                pdf.multi_cell(0, 6, _latin1(f"{label}: {val}"), **nl)
+        pdf.ln(3)
+        pdf.set_font("Helvetica", "", 11)
+        pdf.multi_cell(0, 6, _latin1(cover_text or ""), **nl)
+        pdf.output(path)
+        return path
+    except Exception as e:
+        print("  [x] pdf:", e)
+        return None
+
+
+def _multipart(fields, file_field, file_path, file_name):
+    """Build a multipart/form-data body for Telegram sendDocument."""
+    boundary = "----JobHunter" + str(int(time.time() * 1000))
+    crlf = "\r\n"
+    buf = bytearray()
+    for k, v in fields.items():
+        buf += (f"--{boundary}{crlf}"
+                f'Content-Disposition: form-data; name="{k}"{crlf}{crlf}'
+                f"{v}{crlf}").encode("utf-8")
+    with open(file_path, "rb") as f:
+        content = f.read()
+    buf += (f"--{boundary}{crlf}"
+            f'Content-Disposition: form-data; name="{file_field}"; '
+            f'filename="{file_name}"{crlf}'
+            f"Content-Type: application/pdf{crlf}{crlf}").encode("utf-8")
+    buf += content
+    buf += f"{crlf}--{boundary}--{crlf}".encode("utf-8")
+    return bytes(buf), boundary
+
+
+def send_telegram_document(job, pdf_path):
+    """Send the PDF to Telegram with a caption of title + link."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("  [x] Telegram secrets not set.")
+        return False
+    caption = ("New: <b>" + html.escape(job["title"]) + "</b>\n"
+               + html.escape(job["url"]))
+    fields = {"chat_id": TELEGRAM_CHAT_ID, "caption": caption,
+              "parse_mode": "HTML"}
+    data, boundary = _multipart(fields, "document", pdf_path,
+                                "cover_letter.pdf")
+    url = ("https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN
+           + "/sendDocument")
+    headers = {"Content-Type": "multipart/form-data; boundary=" + boundary}
+    try:
+        with urlopen(Request(url, data=data, headers=headers),
+                     timeout=60) as r:
+            return bool(json.loads(r.read().decode()).get("ok"))
+    except Exception as e:
+        print("  [x] telegram doc:", e)
+        return False
+
+
+def deliver(job):
+    """Send a job to Telegram: AI cover-letter PDF when possible, else text."""
+    if ANTHROPIC_API_KEY:
+        cover = generate_cover_letter(job)
+        if cover:
+            path = os.path.join(tempfile.gettempdir(),
+                                f"job_{abs(hash(job['id']))}.pdf")
+            if make_pdf(job, cover, path):
+                ok = send_telegram_document(job, path)
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+                if ok:
+                    return True
+                print("  [i] PDF send failed; falling back to text.")
+    return send_telegram(job)
+
+
 def load_seen():
     if os.path.exists(SEEN_FILE):
         try:
@@ -683,7 +848,7 @@ def run_once(seen, first_run=False):
         if first_run and not SEND_EXISTING_ON_FIRST_RUN:
             seen.add(job["id"])
             continue
-        if send_telegram(job):
+        if deliver(job):
             sent += 1
             time.sleep(1)
         seen.add(job["id"])

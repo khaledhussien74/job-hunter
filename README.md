@@ -74,6 +74,22 @@ The Muse، Findwork.**
 
 ---
 
+## 📝 خطاب تقديم PDF بالذكاء الاصطناعي (لكل وظيفة)
+
+لو ضفت `ANTHROPIC_API_KEY`: لكل وظيفة جديدة بتعدّي الفلاتر، البوت بيطلب من
+**Claude** يكتب خطاب تقديم (cover letter) مخصص للوظيفة دي، بيحوّله **PDF**
+(فيه عنوان الوظيفة + الشركة/المكان/المصدر/اللينك فوق، والخطاب تحت)، وبيبعته على
+تيليجرام كـ **مستند** مع كابشن فيه عنوان الوظيفة + اللينك.
+
+- الخطاب متفصّل على بياناتك من ملف `APPLICANT_PROFILE` / `APPLICANT_NAME` في
+  أول `job_hunter.py` — عدّلهم لو حبيت تظبّط النبرة أو التفاصيل.
+- لو المفتاح مش موجود (أو حصل أي خطأ)، البوت بيرجع تلقائيًا لإرسال رسالة نصية
+  عادية فيها العنوان + اللينك، فمفيش وظيفة بتضيع.
+- الموديل الافتراضي `claude-haiku-4-5` (سريع ورخيص) — تقدر تغيّره من ثابت
+  `CLAUDE_MODEL` لموديل أقوى (Sonnet/Opus) لو عايز خطابات أغنى.
+
+---
+
 ## 🔐 الإعداد (Environment Variables)
 
 البوت بيقرا القيم الحساسة من environment variables (مش متخزنة جوّه الكود):
@@ -84,6 +100,7 @@ The Muse، Findwork.**
 | `TELEGRAM_CHAT_ID` | ✅ | رقم الـ chat اللي هيوصله الرسايل |
 | `GOOGLE_API_KEY` | للمصدر الأساسي | مفتاح Google Custom Search JSON API |
 | `GOOGLE_CSE_ID` | للمصدر الأساسي | معرّف محرك البحث المخصص (cx) |
+| `ANTHROPIC_API_KEY` | لخطاب الـPDF | مفتاح Claude API لكتابة خطاب تقديم PDF لكل وظيفة |
 | `JOOBLE_API_KEY` | اختياري | لتفعيل Jooble |
 
 ### تشغيل محلي (للتجربة)
@@ -94,6 +111,9 @@ export TELEGRAM_CHAT_ID="ضع_الـchat_id_هنا"
 # للمصدر الأساسي (Google):
 export GOOGLE_API_KEY="..."
 export GOOGLE_CSE_ID="..."
+# لخطاب التقديم PDF (Claude):
+export ANTHROPIC_API_KEY="..."
+pip install fpdf2   # مكتبة توليد الـPDF
 # اختياري:
 export JOOBLE_API_KEY="..."
 
@@ -141,12 +161,19 @@ python job_hunter.py            # تشغيل مستمر
 
 > 💡 الخطة المجانية ١٠٠ بحث/يوم. البوت متظبّط يفضل تحتها (٦ بحثات/تشغيلة، كل ٣ ساعات).
 
-### ٣) تسجّل في Jooble وتجيب الـ key (اختياري)
+### ٣) تجيب مفتاح Claude (`ANTHROPIC_API_KEY`) — لخطاب التقديم PDF
+1. ادخل **https://console.anthropic.com/** وسجّل دخول.
+2. من **Settings → API Keys** اضغط **Create Key** وانسخه — ده
+   `ANTHROPIC_API_KEY`.
+3. الـAPI مدفوع بالاستخدام (بسعر التوكنز)؛ الموديل الافتراضي Haiku رخيص. لو
+   مش عايز الميزة دي دلوقتي، سيب الـ secret فاضي والبوت هيبعت رسالة نصية عادية.
+
+### ٤) تسجّل في Jooble وتجيب الـ key (اختياري)
 1. ادخل **https://jooble.org/api/about**.
 2. اضغط **Get API key** / **Get a free key** واملأ بياناتك.
 3. هيوصلك مفتاح (سلسلة حروف وأرقام) = `JOOBLE_API_KEY`.
 
-### ٤) تضيف القيم في GitHub Secrets (خطوة بخطوة)
+### ٥) تضيف القيم في GitHub Secrets (خطوة بخطوة)
 1. افتح صفحة الريبو على GitHub.
 2. **Settings** (من فوق) ← من القايمة الشمال: **Secrets and variables** ← **Actions**.
 3. اضغط زرار **New repository secret**.
@@ -156,9 +183,10 @@ python job_hunter.py            # تشغيل مستمر
    - `TELEGRAM_CHAT_ID`    (إجباري)
    - `GOOGLE_API_KEY`      (للمصدر الأساسي)
    - `GOOGLE_CSE_ID`       (للمصدر الأساسي)
+   - `ANTHROPIC_API_KEY`   (لخطاب التقديم PDF — اختياري)
    - `JOOBLE_API_KEY`      (لو سجّلت في Jooble)
 
-### ٥) تتأكد إن الـ Actions شغّالة
+### ٦) تتأكد إن الـ Actions شغّالة
 1. روح تاب **Actions** في الريبو، ولو ظهرلك زرار تفعيل اضغط عليه.
 2. اختار workflow اسمه **Job Hunter** واضغط **Run workflow** عشان تجرّبه يدوي.
 3. تابع الـ logs، ولو كله تمام هتبدأ توصلك الوظايف على تيليجرام، وبعد كده
