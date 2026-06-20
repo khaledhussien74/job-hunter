@@ -8,8 +8,6 @@ NEW matching jobs to a Telegram chat.
 Secrets are read from environment variables:
     TELEGRAM_BOT_TOKEN   (required)
     TELEGRAM_CHAT_ID     (required)
-    ADZUNA_APP_ID        (optional - enables Adzuna source)
-    ADZUNA_APP_KEY       (optional - enables Adzuna source)
     JOOBLE_API_KEY       (optional - enables Jooble source)
 
 No scraping of LinkedIn / Indeed / Glassdoor / Bayt is performed.
@@ -17,15 +15,12 @@ No scraping of LinkedIn / Indeed / Glassdoor / Bayt is performed.
 import json, time, html, os, sys, re
 from datetime import datetime
 from urllib.request import Request, urlopen
-from urllib.parse import quote_plus
 
 # ----------------------------------------------------------------------------
 # Secrets (from environment variables — never hard-code them)
 # ----------------------------------------------------------------------------
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
-ADZUNA_APP_ID      = os.environ.get("ADZUNA_APP_ID", "").strip()
-ADZUNA_APP_KEY     = os.environ.get("ADZUNA_APP_KEY", "").strip()
 JOOBLE_API_KEY     = os.environ.get("JOOBLE_API_KEY", "").strip()
 
 # ----------------------------------------------------------------------------
@@ -376,74 +371,46 @@ def fetch_findwork():
     return jobs
 
 
-def fetch_adzuna():
-    """Adzuna aggregator (needs free APP_ID + APP_KEY)."""
-    jobs = []
-    if not (ADZUNA_APP_ID and ADZUNA_APP_KEY):
-        print("  [i] Adzuna skipped (no ADZUNA_APP_ID / ADZUNA_APP_KEY)")
-        return jobs
-    countries = ["gb", "us", "ae"]  # aggregator coverage across boards
-    for c in countries:
-        for term in ["marketing manager", "head of marketing"]:
-            url = (f"https://api.adzuna.com/v1/api/jobs/{c}/search/1"
-                   f"?app_id={ADZUNA_APP_ID}&app_key={ADZUNA_APP_KEY}"
-                   f"&results_per_page=50&what={quote_plus(term)}"
-                   f"&content-type=application/json")
-            raw = _fetch(url)
-            if not raw:
-                continue
-            try:
-                data = json.loads(raw)
-            except json.JSONDecodeError:
-                print("  [x] Adzuna not JSON")
-                continue
-            cur = {"gb": "GBP", "us": "USD", "ae": "AED"}.get(c, "USD")
-            for j in data.get("results", []):
-                jobs.append(_job(
-                    f"adzuna-{j.get('id')}", j.get("title"),
-                    (j.get("company") or {}).get("display_name"),
-                    (j.get("location") or {}).get("display_name") or "Remote",
-                    j.get("redirect_url"), "Adzuna",
-                    description=j.get("description"),
-                    salary_min=j.get("salary_min"),
-                    salary_max=j.get("salary_max"),
-                    salary_currency=cur, salary_period="year"))
-            time.sleep(1)
-    return jobs
+# Jooble: query each Gulf/Egypt location separately so the source itself
+# returns only these regions (instead of fetching the whole world).
+JOOBLE_LOCATIONS = ["Egypt", "United Arab Emirates", "Saudi Arabia",
+                    "Qatar", "Kuwait", "Oman", "Bahrain"]
 
 
 def fetch_jooble():
-    """Jooble aggregator (needs free API key)."""
+    """Jooble aggregator (needs free API key). One request per Gulf/Egypt
+    location so results come back already scoped to those regions."""
     jobs = []
     if not JOOBLE_API_KEY:
         print("  [i] Jooble skipped (no JOOBLE_API_KEY)")
         return jobs
     url = f"https://jooble.org/api/{JOOBLE_API_KEY}"
     for term in ["marketing manager", "head of marketing", "marketing director"]:
-        body = json.dumps({"keywords": term, "location": "remote"}).encode("utf-8")
-        raw = _fetch(url, headers={"Content-Type": "application/json"},
-                     data=body, method="POST")
-        if not raw:
-            continue
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            print("  [x] Jooble not JSON")
-            continue
-        for j in data.get("jobs", []):
-            jobs.append(_job(
-                f"jooble-{j.get('id')}", j.get("title"), j.get("company"),
-                j.get("location") or "Remote", j.get("link"), "Jooble",
-                description=j.get("snippet"),
-                salary_text=j.get("salary") or ""))
-        time.sleep(1)
+        for loc in JOOBLE_LOCATIONS:
+            body = json.dumps({"keywords": term, "location": loc}).encode("utf-8")
+            raw = _fetch(url, headers={"Content-Type": "application/json"},
+                         data=body, method="POST")
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                print("  [x] Jooble not JSON")
+                continue
+            for j in data.get("jobs", []):
+                jobs.append(_job(
+                    f"jooble-{j.get('id')}", j.get("title"), j.get("company"),
+                    j.get("location") or loc, j.get("link"), "Jooble",
+                    description=j.get("snippet"),
+                    salary_text=j.get("salary") or ""))
+            time.sleep(1)
     return jobs
 
 
 SOURCES = [
     fetch_remotive, fetch_jobicy, fetch_remoteok, fetch_arbeitnow,
     fetch_himalayas, fetch_weworkremotely, fetch_themuse, fetch_findwork,
-    fetch_adzuna, fetch_jooble,
+    fetch_jooble,
 ]
 
 
