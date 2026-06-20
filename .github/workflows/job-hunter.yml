@@ -1,0 +1,49 @@
+name: Job Hunter
+
+# Runs the bot automatically every 20 minutes (and on manual trigger).
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch: {}
+
+# Allow the workflow to commit the updated seen_jobs.json back to the repo.
+permissions:
+  contents: write
+
+# Avoid overlapping runs if one takes long.
+concurrency:
+  group: job-hunter
+  cancel-in-progress: false
+
+jobs:
+  hunt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Job Hunter (once)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          JOOBLE_API_KEY: ${{ secrets.JOOBLE_API_KEY }}
+        run: python job_hunter.py --once
+
+      - name: Persist seen_jobs.json
+        run: |
+          if [ -n "$(git status --porcelain seen_jobs.json)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add seen_jobs.json
+            git commit -m "chore: update seen_jobs.json [skip ci]"
+            git push
+          else
+            echo "No changes to seen_jobs.json"
+          fi
