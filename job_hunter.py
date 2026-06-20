@@ -88,16 +88,25 @@ LANG_SOFT_HINTS = ["a plus", "plus.", "nice to have", "nice-to-have",
                    "advantageous", "would be a plus", "optional"]
 
 # (6) Location filter -----------------------------------------------------
+# Priority ALLOW: if the location OR description mentions any of these
+# Middle-East/Egypt/Gulf regions, accept the job even if Europe/America is
+# also mentioned (these regions include Egypt and the Gulf).
+LOCATION_ALLOW_PRIORITY = [
+    "emea", "mena", "middle east", "gcc", "gulf", "arab world",
+    "arab region", "egypt",
+]
+
 # Reject the job only if its LOCATION names / is restricted to Europe or the
-# Americas (a country, a region like EU/EMEA, or a major city). Anything else
-# passes: Gulf, Egypt, open global remote, or an unclear/blank location.
+# Americas (a country, a region like EU/EEA, or a major city) AND none of the
+# priority-allow regions above are present. Anything else passes: Gulf, Egypt,
+# open global remote, or an unclear/blank location.
 # Each entry is a regex token matched (case-insensitive) against the location.
 LOCATION_BLOCK = [
     # --- North America ---
     r"\bunited states\b", r"\bu\.?s\.?a\.?\b", r"\bu\.?s\.?\b", r"\busa\b",
     r"\bamerica\b", r"\bcanada\b", r"\bcanadian\b",
     # --- Europe (regions) ---
-    r"\beurope\b", r"\beuropean\b", r"\be\.?u\.?\b", r"\beea\b", r"\bemea\b",
+    r"\beurope\b", r"\beuropean\b", r"\be\.?u\.?\b", r"\beea\b",
     # --- Europe (countries) ---
     r"netherlands", r"\bholland\b", r"germany", r"\bgerman\b", r"france",
     r"\bfrench\b", r"spain", r"italy", r"belgium", r"poland", r"ireland",
@@ -568,9 +577,15 @@ def salary_passes(job):
     return True  # no salary mentioned -> let it pass
 
 
-def location_passes(location):
+def location_passes(location, description=""):
     """(6) Reject only if the location is in/restricted to Europe or the
-    Americas. Gulf, Egypt, open global remote, and unclear/blank all pass."""
+    Americas. Gulf, Egypt, open global remote, and unclear/blank all pass.
+
+    Priority allow: if the location OR description mentions a Middle-East /
+    Egypt / Gulf region, accept even if Europe/America is also mentioned."""
+    combined = ((location or "") + " " + (description or "")).lower()
+    if any(a in combined for a in LOCATION_ALLOW_PRIORITY):
+        return True  # explicitly covers Egypt/Gulf -> accept
     t = (location or "").strip().lower()
     if not t:
         return True  # unclear -> treat as global remote
@@ -583,7 +598,7 @@ def passes_filter(job):
     blob = (job.get("title", "") + " " + job.get("description", ""))
     if not title_passes(job.get("title")):
         return False
-    if not location_passes(job.get("location")):
+    if not location_passes(job.get("location"), job.get("description")):
         return False
     if not nationality_passes(blob):
         return False
