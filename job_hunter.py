@@ -772,17 +772,18 @@ def _multipart(fields, file_field, file_path, file_name):
     return bytes(buf), boundary
 
 
-def send_telegram_document(job, pdf_path):
-    """Send the PDF to Telegram with a caption of title + link."""
+def send_telegram_document(job, pdf_path, file_name=None, caption=None):
+    """Send a PDF to Telegram with a caption (defaults to title + link)."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("  [x] Telegram secrets not set.")
         return False
-    caption = ("New: <b>" + html.escape(job["title"]) + "</b>\n"
-               + html.escape(job["url"]))
+    if caption is None:
+        caption = ("New: <b>" + html.escape(job["title"]) + "</b>\n"
+                   + html.escape(job["url"]))
     fields = {"chat_id": TELEGRAM_CHAT_ID, "caption": caption,
               "parse_mode": "HTML"}
     data, boundary = _multipart(fields, "document", pdf_path,
-                                "cover_letter.pdf")
+                                file_name or os.path.basename(pdf_path))
     url = ("https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN
            + "/sendDocument")
     headers = {"Content-Type": "multipart/form-data; boundary=" + boundary}
@@ -795,22 +796,64 @@ def send_telegram_document(job, pdf_path):
         return False
 
 
+def _send_tailored_cv(job):
+    """Build a tailored CV PDF from the master CV and send it. Returns True if
+    sent. Works with or without an API key (free local tailoring fallback)."""
+    try:
+        import cv_tailor
+        master = cv_tailor.load_master()
+        path, tailored = cv_tailor.build_cv_for_job(
+            job, master, tempfile.gettempdir())
+    except Exception as e:
+        print("  [x] CV build failed:", e)
+        return False
+    caption = ("CV — <b>" + html.escape(job.get("title","")) + "</b>\n"
+               + html.escape(job.get("url","")))
+    ok = send_telegram_document(job, path, caption=caption)
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    return ok
+
+
+def _send_cover_letter(job):
+    """Generate an AI cover letter, render to PDF, and send it. Needs
+    ANTHROPIC_API_KEY. Returns True if sent."""
+    if not ANTHROPIC_API_KEY:
+        return False
+    cover = generate_cover_letter(job)
+    if not cover:
+        return False
+    path = os.path.join(tempfile.gettempdir(),
+                        f"cover_{abs(hash(job['id']))}.pdf")
+    if not make_pdf(job, cover, path):
+        return False
+    caption = ("Cover letter — <b>" + html.escape(job.get("title","")) + "</b>\n"
+               + html.escape(job.get("url","")))
+    ok = send_telegram_document(job, path,
+                                file_name="Khaled_Hussien_Cover_Letter.pdf",
+                                caption=caption)
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    return ok
+
+
 def deliver(job):
-    """Send a job to Telegram: AI cover-letter PDF when possible, else text."""
-    if ANTHROPIC_API_KEY:
-        cover = generate_cover_letter(job)
-        if cover:
-            path = os.path.join(tempfile.gettempdir(),
-                                f"job_{abs(hash(job['id']))}.pdf")
-            if make_pdf(job, cover, path):
-                ok = send_telegram_document(job, path)
-                try:
-                    os.remove(path)
-                except OSError:
-                    pass
-                if ok:
-                    return True
-                print("  [i] PDF send failed; falling back to text.")
+    """Send a job to Telegram as a tailored CV PDF + an AI cover-letter PDF.
+    Falls back to a plain text message if nothing could be sent."""
+    sent_any = False
+    if _send_tailored_cv(job):
+        sent_any = True
+        time.sleep(1)
+    if _send_cover_letter(job):
+        sent_any = True
+        time.sleep(1)
+    if sent_any:
+        return True
+    print("  [i] document send failed; falling back to text.")
     return send_telegram(job)
 
 

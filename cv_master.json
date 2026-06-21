@@ -1,0 +1,136 @@
+{
+  "name": "KHALED HUSSIEN",
+  "contact": {
+    "email": "khaledhussien122@gmail.com",
+    "phone": "+20 111 199 2803",
+    "location": "El Obour City, Egypt",
+    "linkedin": "LinkedIn"
+  },
+  "allowed_titles": [
+    "Marketing Manager",
+    "Digital Marketing Manager",
+    "Performance Marketing Manager",
+    "Growth Marketing Manager"
+  ],
+  "default_title": "Marketing Manager",
+  "summary": "Marketing manager with 10+ years driving revenue, demand, and online growth across the GCC and MENA. I own the full customer journey end-to-end — paid media, SEO/CRO, organic social, and brand — and make decisions on data, not opinions, reporting on CAC, LTV, ROAS, and contribution to revenue rather than vanity metrics. Hands-on across Google Ads and paid social (Meta, TikTok, Snapchat), with strong full-funnel, CRO, and CRM/lifecycle work, and a daily user of AI tools (ChatGPT, Claude) to automate reporting and workflows. Strong analytics foundation in GA4, Google Tag Manager, and Looker Studio. A proven leader who has built and led teams from 12 to 150+, with deep GCC market knowledge and native Arabic. Certified by Google, LinkedIn, and Coursera.",
+  "competencies": [
+    "Growth & Performance Marketing",
+    "Paid Search (Google Ads)",
+    "Paid Social (Meta, TikTok, Snapchat, LinkedIn)",
+    "Daily Spend, Pacing & Budget Management",
+    "ROI / ROAS & Performance Targets",
+    "Unit Economics (CAC, LTV)",
+    "SEO (Keyword Research, On-Page, Technical)",
+    "Conversion Rate Optimisation (CRO)",
+    "A/B Testing & Experiments",
+    "Full-Funnel & Landing-Page Optimisation",
+    "Organic Social & Content Planning",
+    "Community Management",
+    "Brand Voice & Identity",
+    "Creator / Influencer & UGC",
+    "CRM / Lifecycle & Email Automation",
+    "GA4, Google Tag Manager, Looker Studio",
+    "Monthly Reporting & Insights",
+    "AI Tools & Automation (ChatGPT, Claude)",
+    "Team Leadership & Coaching",
+    "GCC Market & Arabic"
+  ],
+  "experience": [
+    {
+      "title": "Marketing Manager",
+      "dates": "Mar 2025 – Present",
+      "company": "Mansour Holding",
+      "location": "Saudi Arabia (On-site)",
+      "bullets": [
+        "Own marketing end-to-end across paid media, organic social, SEO, and website — mapping the full customer journey from first touch to conversion and repeat, with a consistent brand voice across all channels.",
+        "Manage and optimise paid search (Google Ads) and paid social (Meta), monitoring daily spend and pacing and adjusting in real time to hit ROI targets.",
+        "Raised conversion rate by 20% in the real estate sector through CRO: landing-page optimisation, A/B testing on creatives and audiences, and purchase-flow improvements.",
+        "Built a full visual identity for a new brand from scratch and led a rebranding for a second brand, owning brand consistency across every touchpoint.",
+        "Build and maintain GA4 dashboards, track rankings and conversions, and report monthly with clear, actionable insights; use AI tools (ChatGPT, Claude) to automate reporting and workflows."
+      ]
+    },
+    {
+      "title": "Marketing Manager",
+      "dates": "Jan 2024 – Feb 2025",
+      "company": "Imperium Group",
+      "location": "Dubai & Abu Dhabi, UAE",
+      "bullets": [
+        "Owned revenue-focused growth across Meta, Google, and TikTok, growing market share by 30% and revenue by 20%, reporting on CAC, ROAS, and contribution rather than vanity metrics.",
+        "Cut customer acquisition cost (CAC) by 28% and improved lead quality by 35% through sharper targeting, conversion tracking, and unit-economics analysis.",
+        "Boosted lead generation by 40% in the first quarter by restructuring underperforming campaigns and reworking keywords, landing pages, and the booking funnel (paid search + SEO).",
+        "Built and maintained GA4 and Google Tag Manager dashboards for real-time KPIs, delivering weekly and monthly reporting with recommended actions.",
+        "Ran A/B tests on creatives and landing pages and built remarketing/retargeting campaigns; worked cross-functionally with sales and product to improve lead handoff."
+      ]
+    },
+    {
+      "title": "Marketing Manager",
+      "dates": "Jun 2022 – Dec 2023",
+      "company": "Media Factory World (Yousry Group)",
+      "location": "Kuwait (HQ), Qatar, Egypt, UAE, KSA, Jordan",
+      "bullets": [
+        "Delivered 5.2x ROAS on $300K+ annual ad spend across Google Ads, Meta Business Manager, TikTok, and Snapchat.",
+        "Directed paid media and performance marketing across the GCC and MENA, owning planning, budget allocation, daily pacing, and optimisation across F&B, hospitality, and consumer brands.",
+        "Hired, built, and led a high-performing cross-functional team of 150+, setting goals, KPI frameworks, and performance benchmarks.",
+        "Identified and briefed creators and influencers for UGC and sponsored content, keeping content aligned with campaign objectives.",
+        "Ran activations, launches, and local partnership campaigns adapted to each market and its regulations."
+      ]
+    },
+    {
+      "title": "Digital Marketing Manager",
+      "dates": "Jul 2020 – May 2022",
+      "company": "Town Team",
+      "location": "Egypt (Kenya, KSA, Morocco & Egypt accounts)",
+      "bullets": [
+        "Owned full marketing strategy and full-funnel growth for four accounts across Africa and the Middle East, each delivering ~20% quarterly sales growth.",
+        "Ran multi-phase paid and organic campaigns adapted to each market, raising online visibility by 69% and engagement by 78%.",
+        "Oversaw organic social strategy and content calendars, ensuring brand consistency and healthy community engagement; built retention and re-engagement loops."
+      ]
+    },
+    {
+      "title": "Head of Performance Team",
+      "dates": "Oct 2018 – Jun 2020",
+      "company": "Dezzex Digital Marketing Agency",
+      "location": "Saudi Arabia, Egypt, UAE",
+      "bullets": [
+        "Promoted from Senior Performance Specialist to Head of Performance; led a 12-person team managing 80–150 client accounts a month at a consistent 6x ROI.",
+        "Managed a monthly ad budget exceeding $2.5M across paid social and paid search, owning media-buying strategy and budget allocation.",
+        "Set up KPI frameworks and benchmarks, mentored team members from junior to senior, and helped expand into three new markets."
+      ]
+    },
+    {
+      "title": "Senior Media Buyer",
+      "dates": "Sep 2017 – Sep 2018",
+      "company": "Giant Whale",
+      "location": "Riyadh, Saudi Arabia",
+      "bullets": [
+        "Delivered 5–8x ROAS across 180+ monthly accounts in the KSA real estate and restaurant sectors, managing a SAR 2.5M monthly budget with careful ROI tracking."
+      ]
+    },
+    {
+      "title": "Media Buyer",
+      "dates": "Jan 2017 – Aug 2017",
+      "company": "Wasta Agency",
+      "location": "Egypt",
+      "bullets": [
+        "Ran Facebook and Google Ads campaigns end-to-end for local and regional clients: setup, optimisation, audience targeting, budget allocation, and reporting."
+      ]
+    }
+  ],
+  "skills": {
+    "Paid Media": "Google Ads (Search, Display, Video, Shopping), Meta Business Manager, TikTok Ads, Snapchat Ads, LinkedIn Ads; daily spend & pacing management.",
+    "SEO & CRO": "Keyword research, on-page & technical SEO, Google Search Console, A/B testing, landing-page & purchase-flow optimisation.",
+    "Analytics & Tracking": "GA4, Google Tag Manager, Looker Studio, conversion tracking & event setup, attribution, monthly reporting.",
+    "Organic & Content": "Organic social planning, community management, brand voice, creator/influencer & UGC briefing.",
+    "CRM & Automation": "CRM/lifecycle, email automation, retention/win-back loops; AI tools (ChatGPT, Claude) for content, research, and workflow automation.",
+    "Web & Other": "Elementor/CMS platforms, basic HTML/CSS, basic graphic design."
+  },
+  "education": [
+    {
+      "degree": "Bachelor of Financial Accounting",
+      "institution": "Faculty of Commerce, Cairo University"
+    }
+  ],
+  "certifications": "Google, LinkedIn, and Coursera digital marketing credentials.",
+  "languages": "Arabic (Native), English (Professional)."
+}
