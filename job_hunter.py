@@ -20,6 +20,12 @@ from datetime import datetime
 from urllib.request import Request, urlopen
 from urllib.parse import quote_plus
 
+try:
+    import cv_tailor  # tailored, ATS-friendly CV per job (optional feature)
+except Exception as _e:  # pragma: no cover - keep bot running if module missing
+    cv_tailor = None
+    print("  [i] cv_tailor not available:", _e)
+
 # ----------------------------------------------------------------------------
 # Secrets (from environment variables — never hard-code them)
 # ----------------------------------------------------------------------------
@@ -28,6 +34,13 @@ TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 GOOGLE_API_KEY     = os.environ.get("GOOGLE_API_KEY", "").strip()
 GOOGLE_CSE_ID      = os.environ.get("GOOGLE_CSE_ID", "").strip()
 JOOBLE_API_KEY     = os.environ.get("JOOBLE_API_KEY", "").strip()
+# Optional: enables AI-tailored CVs. Without it the bot still sends jobs and
+# (if cv_tailor is present) a heuristic-tailored CV.
+ANTHROPIC_API_KEY  = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+# Attach a tailored CV PDF to each job message. Set ATTACH_CV=0 to disable.
+ATTACH_CV          = os.environ.get("ATTACH_CV", "1").strip() != "0"
+# Also attach a tailored cover-letter PDF. Set ATTACH_COVER_LETTER=0 to disable.
+ATTACH_COVER_LETTER = os.environ.get("ATTACH_COVER_LETTER", "1").strip() != "0"
 
 # ----------------------------------------------------------------------------
 # Filtering rules
@@ -89,11 +102,15 @@ LANG_SOFT_HINTS = ["a plus", "plus.", "nice to have", "nice-to-have",
                    "advantageous", "would be a plus", "optional"]
 
 # (6) Location filter -----------------------------------------------------
-# STRICT allow-list: accept a job ONLY when its location OR description
-# clearly places it in the Gulf, Egypt, or a region that includes them
-# (MENA / Middle East / GCC / Gulf / Arab region). Everything else is
-# rejected — Europe, the Americas, non-Gulf Asia, and any vague/blank or
-# generic "Remote / Worldwide / Anywhere" location with no explicit mention.
+# Accept a job when EITHER:
+#   - its location/description clearly places it in the Gulf, Egypt, or a
+#     region that includes them (MENA / Middle East / GCC / Gulf), OR
+#   - it is OPEN remote: Remote / Worldwide / Anywhere / Global with NO
+#     specific country named.
+# Reject on-site jobs outside the Gulf/Egypt AND remote jobs restricted to a
+# country/region outside the Gulf/Egypt (e.g. "Remote - US", "Remote - Europe",
+# "Remote - Nigeria", "Amsterdam"). Blank/unclear locations are treated as open
+# remote and accepted.
 # Short/ambiguous tokens use word boundaries to avoid false matches
 # (e.g. "oman" inside "Romania", "mena" inside "phenomena").
 LOCATION_ALLOW = [
@@ -114,6 +131,39 @@ LOCATION_ALLOW = [
     r"bahrain", r"manama",
     # --- Egypt ---
     r"\begypt\b", r"egyptian", r"cairo",
+]
+
+# Tokens that do NOT indicate a specific place: open-remote keywords + generic
+# filler. If a location has NO leftover tokens after removing these, it's
+# treated as OPEN remote (or unclear) and accepted. Any leftover token means a
+# specific place is named -> only Gulf/Egypt (LOCATION_ALLOW) is accepted.
+LOCATION_IGNORE_TOKENS = {
+    "remote", "worldwide", "world", "wide", "anywhere", "any", "global",
+    "globally", "wfh", "work", "from", "home", "distributed", "hybrid",
+    "first", "friendly", "fully", "only", "based", "location", "locations",
+    "region", "regions", "team", "teams", "position", "role", "roles",
+    "candidate", "candidates", "applicant", "applicants", "must", "be",
+    "within", "across", "open", "multiple", "various", "several", "flexible",
+    "timezone", "time", "zone", "available", "eligible", "authorized",
+    "probably", "somewhere", "the", "in", "of", "for", "to", "and", "or",
+    "with", "your", "our", "you", "a", "an", "na", "tbd", "tba", "n",
+}
+
+# Known excluded regions/countries/cities — used ONLY to scan SHORT snippet
+# descriptions (e.g. Google CSE, where the location field is a generic
+# "Remote" and the real geo lives in the title/snippet). Bare "us"/"eu" are
+# intentionally omitted here to avoid matching words like "join us".
+EXCLUDED_DESC = [
+    r"united states", r"\busa\b", r"u\.s\.a", r"u\.s\.", r"\bcanada\b",
+    r"\beurope\b", r"european", r"\beea\b", r"netherlands", r"germany",
+    r"france", r"spain", r"italy", r"belgium", r"poland", r"ireland",
+    r"portugal", r"sweden", r"denmark", r"norway", r"finland", r"austria",
+    r"switzerland", r"\buk\b", r"united kingdom", r"england", r"scotland",
+    r"new york", r"san francisco", r"los angeles", r"chicago", r"boston",
+    r"seattle", r"austin", r"london", r"amsterdam", r"berlin", r"munich",
+    r"paris", r"madrid", r"barcelona", r"\brome\b", r"milan", r"brussels",
+    r"warsaw", r"dublin", r"lisbon", r"stockholm", r"copenhagen", r"vienna",
+    r"zurich",
 ]
 
 # (3) Salary filter: convert to EGP/month; reject if < this threshold.
@@ -596,13 +646,37 @@ def salary_passes(job):
 
 
 def location_passes(location, description=""):
-    """(6) STRICT: accept ONLY when the location OR description explicitly
-    names the Gulf, Egypt, or a region that includes them (MENA / Middle
-    East / GCC / Gulf / Arab region). Everything else is rejected, including
-    vague/blank locations and generic 'Remote / Worldwide / Anywhere' with
-    no explicit Gulf/Egypt/MENA mention."""
-    combined = ((location or "") + " " + (description or "")).lower()
-    return any(re.search(p, combined) for p in LOCATION_ALLOW)
+    """(6) Accept Gulf/Egypt/MENA jobs AND open-remote jobs (Remote / Worldwide
+    / Anywhere / Global with no specific country). Reject on-site jobs outside
+    the Gulf/Egypt and remote jobs restricted to a non-Gulf country/region
+    (e.g. 'Remote - US', 'Remote - Nigeria', 'Amsterdam'). Blank/unclear
+    locations are treated as open remote and accepted."""
+    loc = (location or "").lower().strip()
+    desc = (description or "").lower()
+    short_desc = len(desc) < 300
+
+    def has(pats, text):
+        return any(re.search(p, text) for p in pats)
+
+    # 1) Gulf/Egypt/MENA explicitly in the location -> accept.
+    if has(LOCATION_ALLOW, loc):
+        return True
+
+    # Does the location name a SPECIFIC place (after dropping remote/filler)?
+    leftover = [t for t in re.findall(r"[a-z]+", loc)
+                if t not in LOCATION_IGNORE_TOKENS]
+
+    if not leftover:
+        # Open remote / unclear. If a SHORT snippet description carries the real
+        # geo (Google-style), use it to allow Gulf/Egypt or reject excluded.
+        if has(LOCATION_ALLOW, desc):
+            return True
+        if short_desc and has(EXCLUDED_DESC, desc):
+            return False
+        return True  # truly open remote / worldwide / anywhere / unclear
+
+    # 2) Location names a specific non-Gulf/Egypt place -> reject.
+    return False
 
 
 def passes_filter(job):
@@ -649,6 +723,102 @@ def send_telegram(job):
         return False
 
 
+_MASTER_CV = None
+
+
+def _get_master_cv():
+    global _MASTER_CV
+    if _MASTER_CV is None and cv_tailor is not None:
+        try:
+            _MASTER_CV = cv_tailor.load_master()
+        except Exception as e:
+            print("  [x] could not load cv_master.json:", e)
+            _MASTER_CV = False  # mark as tried-and-failed
+    return _MASTER_CV or None
+
+
+def send_telegram_document(path, caption):
+    """Send a local file to Telegram via sendDocument (multipart/form-data)."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return False
+    boundary = "----JobHunterBoundary7MA4YWxkTrZu0gW"
+    with open(path, "rb") as f:
+        file_bytes = f.read()
+    fname = os.path.basename(path)
+
+    def part(name, value):
+        return (("--" + boundary + "\r\n").encode()
+                + ('Content-Disposition: form-data; name="%s"\r\n\r\n' % name).encode()
+                + (value + "\r\n").encode())
+
+    body = b""
+    body += part("chat_id", TELEGRAM_CHAT_ID)
+    body += part("caption", caption[:1024])
+    body += part("parse_mode", "HTML")
+    body += ("--" + boundary + "\r\n").encode()
+    body += ('Content-Disposition: form-data; name="document"; filename="%s"\r\n'
+             % fname).encode()
+    body += b"Content-Type: application/pdf\r\n\r\n"
+    body += file_bytes + b"\r\n"
+    body += ("--" + boundary + "--\r\n").encode()
+
+    req = Request("https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendDocument",
+                  data=body, method="POST",
+                  headers={"Content-Type": "multipart/form-data; boundary=" + boundary})
+    try:
+        with urlopen(req, timeout=60) as r:
+            return bool(json.loads(r.read().decode()).get("ok"))
+    except Exception as e:
+        print("  [x] telegram document:", e)
+        return False
+
+
+def send_job_with_cv(job, out_dir):
+    """Build a tailored CV (and optional cover letter) for the job and send them
+    as Telegram documents with the job title + link as the caption. Falls back
+    to a plain text message if nothing can be built/sent."""
+    master = _get_master_cv()
+    if not (ATTACH_CV and cv_tailor and master):
+        return send_telegram(job)
+    try:
+        pdf_path, tailored = cv_tailor.build_cv_for_job(
+            job, master, out_dir, api_key=ANTHROPIC_API_KEY or None)
+    except Exception as e:
+        print("  [x] CV build failed, sending text only:", e)
+        return send_telegram(job)
+
+    lines = ["New: <b>" + html.escape(job["title"]) + "</b>"]
+    for field in ("company", "location", "source"):
+        val = (job.get(field) or "").strip()
+        if val:
+            lines.append(html.escape(val))
+    lines.append("CV: <b>" + html.escape(tailored.get("target_title", "")) + "</b>")
+    lines.append(html.escape(job["url"]))
+    caption = "\n".join(lines)
+
+    ok = send_telegram_document(pdf_path, caption)
+    if not ok:
+        # Fallback: if the CV document failed, at least send the text.
+        ok = send_telegram(job)
+
+    # Optional: also send a tailored cover letter as a second document.
+    if ok and ATTACH_COVER_LETTER:
+        try:
+            cl_path, letter = cv_tailor.build_cover_letter_for_job(
+                job, master, out_dir)
+            cl_caption = ("Cover Letter: <b>"
+                          + html.escape(letter.get("title", "")) + "</b>")
+            comp = (job.get("company") or "").strip()
+            if comp:
+                cl_caption += " @ " + html.escape(comp)
+            send_telegram_document(cl_path, cl_caption)
+            time.sleep(1)
+        except Exception as e:
+            print("  [x] cover letter build/send failed (skipping):", e)
+
+    return ok
+
+
 def load_seen():
     if os.path.exists(SEEN_FILE):
         try:
@@ -679,11 +849,13 @@ def run_once(seen, first_run=False):
     for j in matched:
         print("   *", j["title"], "-", j["company"], "(", j["source"], ")")
     sent = 0
+    cv_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cv_out")
+    os.makedirs(cv_dir, exist_ok=True)
     for job in new:
         if first_run and not SEND_EXISTING_ON_FIRST_RUN:
             seen.add(job["id"])
             continue
-        if send_telegram(job):
+        if send_job_with_cv(job, cv_dir):
             sent += 1
             time.sleep(1)
         seen.add(job["id"])
